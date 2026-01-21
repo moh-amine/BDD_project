@@ -18,6 +18,20 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+# Try to load .env file for local development (optional)
+# This helps with local development but is not required for cloud deployment
+try:
+    from dotenv import load_dotenv
+    env_path = os.path.join(project_root, ".env")
+    if os.path.exists(env_path):
+        load_dotenv(dotenv_path=env_path, override=False)
+except ImportError:
+    # python-dotenv not installed - that's OK, will use environment variables only
+    pass
+except Exception:
+    # Silently fail - environment variables will be used instead
+    pass
+
 import streamlit as st
 from datetime import date, time, timedelta
 
