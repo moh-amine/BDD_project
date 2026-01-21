@@ -1,0 +1,16 @@
+# Exam Scheduling System - Python Dependencies
+# =============================================
+# This file contains all Python packages required for the project.
+# Install with: pip install -r requirements.txt
+
+# Web Framework
+streamlit>=1.28.0
+
+# Database
+psycopg2-binary>=2.9.9
+
+# Password Hashing
+bcrypt>=4.0.1
+
+# Environment Variables (optional, for local development)
+python-dotenv>=1.0.0
