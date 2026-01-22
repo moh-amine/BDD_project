@@ -20,6 +20,7 @@ For local development:
 
 For Streamlit Cloud deployment:
 - All variables must be set in Streamlit Cloud Secrets (TOML format)
+- The module automatically reads from st.secrets if environment variables are not set
 - SSL mode is automatically set to "require" (mandatory for Neon PostgreSQL)
 
 Author: Exam Scheduling System
@@ -29,6 +30,41 @@ import os
 from pathlib import Path
 import psycopg2
 from psycopg2.extras import RealDictCursor
+
+
+def _get_env_var(var_name: str) -> str:
+    """
+    Get environment variable with fallback to Streamlit secrets.
+    
+    Priority:
+    1. Environment variable (os.getenv)
+    2. Streamlit secrets (st.secrets) - for Streamlit Cloud
+    3. None if not found
+    
+    Args:
+        var_name: Name of the environment variable
+        
+    Returns:
+        str | None: Value of the variable or None if not found
+    """
+    # First try environment variable
+    value = os.getenv(var_name)
+    
+    # If not found and Streamlit is available, try st.secrets
+    if value is None:
+        try:
+            import streamlit as st
+            # Try top-level secret first
+            if hasattr(st.secrets, var_name):
+                value = st.secrets[var_name]
+            # Try database section
+            elif hasattr(st.secrets, 'database') and hasattr(st.secrets.database, var_name):
+                value = st.secrets.database[var_name]
+        except (ImportError, AttributeError, KeyError, TypeError):
+            # Streamlit not available or secrets not configured - that's OK
+            pass
+    
+    return value
 
 
 def _load_env_file_if_needed():
@@ -76,12 +112,12 @@ def _validate_connection_params():
     # Try to load .env file for local development (if any variable missing)
     _load_env_file_if_needed()
     
-    # Read connection parameters from environment variables (NO DEFAULTS)
-    host = os.getenv("DB_HOST")
-    port = os.getenv("DB_PORT")
-    database = os.getenv("DB_NAME")
-    user = os.getenv("DB_USER")
-    password = os.getenv("DB_PASSWORD")
+    # Read connection parameters from environment variables or Streamlit secrets (NO DEFAULTS)
+    host = _get_env_var("DB_HOST")
+    port = _get_env_var("DB_PORT")
+    database = _get_env_var("DB_NAME")
+    user = _get_env_var("DB_USER")
+    password = _get_env_var("DB_PASSWORD")
     
     # Collect all missing variables for a comprehensive error message
     missing_vars = []
@@ -157,6 +193,7 @@ def get_connection():
     
     For Streamlit Cloud deployment:
     - All variables must be set in Streamlit Cloud Secrets (TOML format)
+    - The module automatically reads from st.secrets if environment variables are not set
     - See error message for exact format requirements
     
     Returns:

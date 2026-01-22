@@ -69,8 +69,26 @@ def login(username: str, password: str) -> Tuple[bool, Optional[dict], str]:
         >>> if success:
         ...     print(f"Logged in as {user['role']}")
     """
-    conn = get_connection()
-    cur = conn.cursor()
+    try:
+        # Try to establish database connection
+        # This will raise an exception if connection fails (e.g., wrong credentials, network issue)
+        conn = get_connection()
+        cur = conn.cursor()
+    except ValueError as e:
+        # Configuration error (missing environment variables)
+        return False, None, f"❌ Erreur de configuration: {str(e)}"
+    except Exception as e:
+        # Connection error (network, SSL, wrong DB credentials)
+        error_msg = str(e)
+        # Provide helpful error message for common connection issues
+        if "password authentication failed" in error_msg.lower():
+            return False, None, "❌ Erreur de connexion à la base de données: Identifiants incorrects. Vérifiez DB_USER et DB_PASSWORD dans Streamlit Cloud Secrets."
+        elif "could not connect" in error_msg.lower() or "connection refused" in error_msg.lower():
+            return False, None, "❌ Erreur de connexion: Impossible de se connecter à la base de données. Vérifiez DB_HOST et que la base de données est accessible."
+        elif "ssl" in error_msg.lower():
+            return False, None, f"❌ Erreur SSL: {error_msg}"
+        else:
+            return False, None, f"❌ Erreur de connexion à la base de données: {error_msg}"
     
     try:
         # Query user by username
@@ -109,7 +127,11 @@ def login(username: str, password: str) -> Tuple[bool, Optional[dict], str]:
         
     except Exception as e:
         conn.rollback()
-        return False, None, f"Erreur lors de la connexion: {str(e)}"
+        # Database query error (table doesn't exist, etc.)
+        error_msg = str(e)
+        if "does not exist" in error_msg.lower() or "relation" in error_msg.lower():
+            return False, None, f"❌ Erreur: La table 'users' n'existe pas. Vérifiez que le schéma de la base de données est correctement initialisé."
+        return False, None, f"❌ Erreur lors de la connexion: {error_msg}"
         
     finally:
         cur.close()
