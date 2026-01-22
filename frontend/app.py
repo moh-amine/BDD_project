@@ -138,7 +138,16 @@ def show_login_page():
         
         if submit_button:
             if username and password:
+                # DEBUG: Log login attempt
+                import sys
+                print(f"[DEBUG FRONTEND] Login attempt - Username: '{username}', Password length: {len(password)}", file=sys.stderr)
+                
                 success, user_data, message = login(username, password)
+                
+                # DEBUG: Log login result
+                print(f"[DEBUG FRONTEND] Login result - Success: {success}, Message: {message}", file=sys.stderr)
+                if user_data:
+                    print(f"[DEBUG FRONTEND] User data - ID: {user_data.get('id')}, Role: {user_data.get('role')}, Linked ID: {user_data.get('linked_id')}", file=sys.stderr)
                 
                 if success and user_data:
                     # Store session state properly

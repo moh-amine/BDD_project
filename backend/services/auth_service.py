@@ -45,9 +45,27 @@ def verify_password(password: str, password_hash: str) -> bool:
     Returns:
         bool: True if password matches, False otherwise
     """
-    password_bytes = password.encode('utf-8')
-    hash_bytes = password_hash.encode('utf-8')
-    return bcrypt.checkpw(password_bytes, hash_bytes)
+    try:
+        if not password or not password_hash:
+            print(f"[DEBUG] verify_password: Empty password or hash - password: {bool(password)}, hash: {bool(password_hash)}")
+            return False
+        
+        password_bytes = password.encode('utf-8')
+        hash_bytes = password_hash.encode('utf-8')
+        
+        # Check if hash looks like a valid bcrypt hash (starts with $2a$, $2b$, or $2y$)
+        if not (password_hash.startswith('$2a$') or password_hash.startswith('$2b$') or password_hash.startswith('$2y$')):
+            print(f"[DEBUG] verify_password: Invalid bcrypt hash format. Hash starts with: {password_hash[:10] if len(password_hash) >= 10 else password_hash}")
+            return False
+        
+        result = bcrypt.checkpw(password_bytes, hash_bytes)
+        print(f"[DEBUG] verify_password: bcrypt.checkpw result: {result}")
+        return result
+    except Exception as e:
+        print(f"[DEBUG] verify_password: Exception occurred: {type(e).__name__}: {str(e)}")
+        import traceback
+        print(f"[DEBUG] verify_password traceback:\n{traceback.format_exc()}")
+        return False
 
 
 def login(username: str, password: str) -> Tuple[bool, Optional[dict], str]:
@@ -69,6 +87,14 @@ def login(username: str, password: str) -> Tuple[bool, Optional[dict], str]:
         >>> if success:
         ...     print(f"Logged in as {user['role']}")
     """
+    # Normalize username (strip whitespace, but keep case-sensitive for now)
+    username = username.strip() if username else ""
+    password = password if password else ""
+    
+    if not username or not password:
+        print(f"[DEBUG] Login: Empty username or password provided")
+        return False, None, "Veuillez remplir tous les champs"
+    
     try:
         # Try to establish database connection
         # This will raise an exception if connection fails (e.g., wrong credentials, network issue)
@@ -100,12 +126,36 @@ def login(username: str, password: str) -> Tuple[bool, Optional[dict], str]:
         
         user = cur.fetchone()
         
-        if not user:
+        # DEBUG: Log user fetch result
+        print(f"[DEBUG] Login attempt for username: '{username}'")
+        if user:
+            print(f"[DEBUG] User found: id={user.get('id')}, username={user.get('username')}, role={user.get('role')}, linked_id={user.get('linked_id')}")
+            print(f"[DEBUG] Password hash exists: {user.get('password_hash') is not None}")
+            print(f"[DEBUG] Password hash length: {len(user.get('password_hash', '')) if user.get('password_hash') else 0}")
+            print(f"[DEBUG] Password hash preview: {user.get('password_hash', '')[:20] if user.get('password_hash') else 'None'}...")
+        else:
+            print(f"[DEBUG] User NOT found in database for username: '{username}'")
             return False, None, "Nom d'utilisateur ou mot de passe incorrect"
         
+        # Check if password_hash exists and is not empty
+        password_hash = user.get('password_hash')
+        if not password_hash:
+            print(f"[DEBUG] ERROR: password_hash is None or empty for user '{username}'")
+            return False, None, "❌ Erreur: Le mot de passe de l'utilisateur n'est pas configuré correctement dans la base de données."
+        
         # Verify password
-        if not verify_password(password, user['password_hash']):
+        print(f"[DEBUG] Attempting password verification...")
+        print(f"[DEBUG] Input password length: {len(password)}")
+        print(f"[DEBUG] Stored hash length: {len(password_hash)}")
+        
+        password_valid = verify_password(password, password_hash)
+        print(f"[DEBUG] Password verification result: {password_valid}")
+        
+        if not password_valid:
+            print(f"[DEBUG] Password verification FAILED for user '{username}'")
             return False, None, "Nom d'utilisateur ou mot de passe incorrect"
+        
+        print(f"[DEBUG] Password verification SUCCESS for user '{username}'")
         
         # Update last login timestamp
         cur.execute("""
@@ -123,12 +173,16 @@ def login(username: str, password: str) -> Tuple[bool, Optional[dict], str]:
             'linked_id': user['linked_id']
         }
         
+        print(f"[DEBUG] Login SUCCESS for user '{username}' with role '{user_data['role']}'")
         return True, user_data, "Connexion réussie"
         
     except Exception as e:
         conn.rollback()
         # Database query error (table doesn't exist, etc.)
         error_msg = str(e)
+        print(f"[DEBUG] Exception during login query: {type(e).__name__}: {error_msg}")
+        import traceback
+        print(f"[DEBUG] Traceback:\n{traceback.format_exc()}")
         if "does not exist" in error_msg.lower() or "relation" in error_msg.lower():
             return False, None, f"❌ Erreur: La table 'users' n'existe pas. Vérifiez que le schéma de la base de données est correctement initialisé."
         return False, None, f"❌ Erreur lors de la connexion: {error_msg}"
